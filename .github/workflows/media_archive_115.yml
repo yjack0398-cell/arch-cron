@@ -2,7 +2,7 @@ name: X Media Archive to 115
 
 on:
   schedule:
-    - cron: "0 23 * * *" # UTC 23:00 -> 115网盘可以单独一个时间 例如早上7点
+    - cron: "0 12 * * *" # UTC 12:00 -> 115网盘可以单独一个时间 例如晚上8点
   workflow_dispatch:
 
 jobs:
@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
         user: ${{ fromJson(needs.setup-matrix.outputs.users_matrix) }}
     steps:
@@ -53,4 +54,4 @@ jobs:
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
           COOKIES_115: ${{ secrets.COOKIES_115 }}
         run: |
-          python src/tasks/task_115.py --users "${{ matrix.user }}"
+          python src/tasks/task_115.py --users "${{ matrix.user }}" --time_range "3天"

@@ -2,7 +2,7 @@ name: X Media Archive to Quark
 
 on:
   schedule:
-    - cron: "0 4 * * *" # UTC 4:00 -> CST 中午 12:00
+    - cron: "0 6 * * *" # UTC 06:00 -> CST 下午 14:00
   workflow_dispatch:
     inputs:
       time_range:
@@ -16,7 +16,7 @@ on:
           - "1个月"
           - "1年"
           - "全部"
-        default: "1个月"
+        default: "3天"
       custom_users:
         description: "自定义下载人员 (逗号分隔，留空则执行全体人员)"
         required: false
@@ -46,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
         user: ${{ fromJson(needs.setup-matrix.outputs.users_matrix) }}
     steps:
@@ -74,5 +75,5 @@ jobs:
           COOKIES_QUARK: ${{ secrets.COOKIES_QUARK }}
           TIME_RANGE: ${{ github.event.inputs.time_range }}
         run: |
-          RANGE="${TIME_RANGE:-1个月}"
+          RANGE="${TIME_RANGE:-3天}"
           python src/tasks/task_quark.py --users "${{ matrix.user }}" --time_range "$RANGE"
