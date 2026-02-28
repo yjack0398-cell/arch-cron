@@ -1,0 +1,78 @@
+name: X Media Archive to Quark
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # UTC 4:00 -> CST 中午 12:00
+  workflow_dispatch:
+    inputs:
+      time_range:
+        description: "爬取时间范围"
+        required: true
+        type: choice
+        options:
+          - "当天"
+          - "3天"
+          - "1周"
+          - "1个月"
+          - "1年"
+          - "全部"
+        default: "1个月"
+      custom_users:
+        description: "自定义下载人员 (逗号分隔，留空则执行全体人员)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      users_matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Generate Matrix
+        id: set-matrix
+        env:
+          USERS_SECRET: ${{ secrets.TWITTER_USERS_ARCHIVE }}
+          CUSTOM_USERS: ${{ github.event.inputs.custom_users }}
+        run: |
+          USERS="${CUSTOM_USERS:-$USERS_SECRET}"
+          CLEAN_USERS=$(echo "$USERS" | tr -d ' ' )
+          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0))' <<< "$CLEAN_USERS")
+          echo "Generated matrix JSON: $JSON_ARRAY"
+          echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
+
+  archive_quark:
+    needs: setup-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        user: ${{ fromJson(needs.setup-matrix.outputs.users_matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Playwright Browsers
+        run: |
+          playwright install chromium
+
+      - name: Run Quark Archiver for ${{ matrix.user }}
+        env:
+          TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
+          COOKIES_QUARK: ${{ secrets.COOKIES_QUARK }}
+          TIME_RANGE: ${{ github.event.inputs.time_range }}
+        run: |
+          RANGE="${TIME_RANGE:-1个月}"
+          python src/tasks/task_quark.py --users "${{ matrix.user }}" --time_range "$RANGE"

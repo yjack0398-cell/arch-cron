@@ -1,0 +1,56 @@
+name: X Media Archive to Google Photos
+
+on:
+  schedule:
+    - cron: "0 12 * * *" # UTC 12:00 -> CST 晚上 20:00
+  workflow_dispatch:
+
+jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      users_matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Generate Matrix
+        id: set-matrix
+        env:
+          USERS: ${{ secrets.TWITTER_USERS_ARCHIVE }}
+        run: |
+          CLEAN_USERS=$(echo "$USERS" | tr -d ' ' )
+          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0))' <<< "$CLEAN_USERS")
+          echo "Generated matrix JSON: $JSON_ARRAY"
+          echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
+
+  archive_google:
+    needs: setup-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        user: ${{ fromJson(needs.setup-matrix.outputs.users_matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Playwright Browsers
+        run: |
+          playwright install chromium
+
+      - name: Run Google Photos Archiver for ${{ matrix.user }}
+        env:
+          TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
+          GOOGLE_PHOTOS_TOKEN: ${{ secrets.GOOGLE_PHOTOS_TOKEN }}
+        run: |
+          python src/tasks/task_google.py --users "${{ matrix.user }}"
