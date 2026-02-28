@@ -2,7 +2,7 @@ name: X Media Archive to Google Photos
 
 on:
   schedule:
-    - cron: "0 12 * * *" # UTC 12:00 -> CST 晚上 20:00
+    - cron: "0 12 */3 * *" # 每 3 天运行一次 (UTC时间12:00, CST晚上20:00)
   workflow_dispatch:
 
 jobs:
@@ -53,4 +53,4 @@ jobs:
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
           GOOGLE_PHOTOS_TOKEN: ${{ secrets.GOOGLE_PHOTOS_TOKEN }}
         run: |
-          python src/tasks/task_google.py --users "${{ matrix.user }}"
+          python src/tasks/task_google.py --users "${{ matrix.user }}" --time_range "3天"
