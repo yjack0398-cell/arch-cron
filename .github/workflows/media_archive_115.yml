@@ -17,7 +17,7 @@ jobs:
           USERS: ${{ secrets.TWITTER_USERS_ARCHIVE }}
         run: |
           CLEAN_USERS=$(echo "$USERS" | tr -d ' ' )
-          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0))' <<< "$CLEAN_USERS")
+          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0)) | _nwise(5) | map(join(","))' <<< "$CLEAN_USERS")
           echo "Generated matrix JSON: $JSON_ARRAY"
           echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
 
@@ -54,4 +54,8 @@ jobs:
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
           COOKIES_115: ${{ secrets.COOKIES_115 }}
         run: |
-          python src/tasks/task_115.py --users "${{ matrix.user }}" --time_range "3天"
+          IFS=',' read -ra ADDR <<< "${{ matrix.user }}"
+          for u in "${ADDR[@]}"; do
+            echo "Processing user: $u"
+            python src/tasks/task_115.py --users "$u" --time_range "3天"
+          done

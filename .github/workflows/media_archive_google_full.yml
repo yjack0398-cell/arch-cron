@@ -19,8 +19,8 @@ jobs:
         run: |
           # 去除所有空格，处理类似 "user1, user2" 的输入
           CLEAN_USERS=$(echo "${{ github.event.inputs.users }}" | tr -d ' ' )
-          # 利用 jq 将逗号分隔字符串转化为 JSON 数组 (丢弃空元素)
-          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0))' <<< "$CLEAN_USERS")
+          # 利用 jq 将逗号分隔字符串转化为每 5 个一组的 JSON 数组块 (丢弃空元素)
+          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0)) | _nwise(5) | map(join(","))' <<< "$CLEAN_USERS")
           echo "Generated matrix JSON: $JSON_ARRAY"
           echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
 
@@ -56,4 +56,8 @@ jobs:
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
           GOOGLE_PHOTOS_TOKEN: ${{ secrets.GOOGLE_PHOTOS_TOKEN }}
         run: |
-          python src/tasks/task_google_full.py --users "${{ matrix.user }}"
+          IFS=',' read -ra ADDR <<< "${{ matrix.user }}"
+          for u in "${ADDR[@]}"; do
+            echo "Processing user: $u"
+            python src/tasks/task_google_full.py --users "$u"
+          done
