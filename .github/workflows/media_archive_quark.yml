@@ -37,7 +37,8 @@ jobs:
         run: |
           USERS="${CUSTOM_USERS:-$USERS_SECRET}"
           CLEAN_USERS=$(echo "$USERS" | tr -d ' ' )
-          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0))' <<< "$CLEAN_USERS")
+          # 将长名单切割，每 5 个放进一组（作为逗号分隔的子字符串）
+          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0)) | _nwise(5) | map(join(","))' <<< "$CLEAN_USERS")
           echo "Generated matrix JSON: $JSON_ARRAY"
           echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
 
@@ -76,4 +77,9 @@ jobs:
           TIME_RANGE: ${{ github.event.inputs.time_range }}
         run: |
           RANGE="${TIME_RANGE:-3天}"
-          python src/tasks/task_quark.py --users "${{ matrix.user }}" --time_range "$RANGE"
+          # matrix.user 现在可能包含多个逗号分隔的用户名
+          IFS=',' read -ra ADDR <<< "${{ matrix.user }}"
+          for u in "${ADDR[@]}"; do
+            echo "Processing user: $u"
+            python src/tasks/task_quark.py --users "$u" --time_range "$RANGE"
+          done
