@@ -4,6 +4,26 @@ on:
   schedule:
     - cron: "0 12 * * *" # UTC 12:00 -> 115网盘可以单独一个时间 例如晚上8点
   workflow_dispatch:
+    inputs:
+      time_range:
+        description: "爬取时间范围"
+        required: true
+        type: choice
+        options:
+          - "当天"
+          - "3天"
+          - "1周"
+          - "1个月"
+          - "3个月"
+          - "半年"
+          - "1年"
+          - "全部"
+        default: "3天"
+      custom_users:
+        description: "自定义下载人员 (逗号分隔，留空则执行全量抓取)"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   setup-matrix:
@@ -14,9 +34,11 @@ jobs:
       - name: Generate Matrix
         id: set-matrix
         env:
-          USERS: ${{ secrets.TWITTER_USERS_ARCHIVE }}
+          USERS_SECRET: ${{ secrets.TWITTER_USERS_ARCHIVE }}
+          CUSTOM_USERS: ${{ github.event.inputs.custom_users }}
         run: |
-          CLEAN_USERS=$(echo "$USERS" | tr -d ' ' )
+          USERS="${CUSTOM_USERS:-$USERS_SECRET}"
+          CLEAN_USERS=$(echo "$USERS" | tr -d ' ')
           JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0)) | _nwise(5) | map(join(","))' <<< "$CLEAN_USERS")
           echo "Generated matrix JSON: $JSON_ARRAY"
           echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
@@ -53,9 +75,11 @@ jobs:
         env:
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
           COOKIES_115: ${{ secrets.COOKIES_115 }}
+          TIME_RANGE: ${{ github.event.inputs.time_range }}
         run: |
+          RANGE="${TIME_RANGE:-3天}"
           IFS=',' read -ra ADDR <<< "${{ matrix.user }}"
           for u in "${ADDR[@]}"; do
             echo "Processing user: $u"
-            python src/tasks/task_115.py --users "$u" --time_range "3天"
+            python src/tasks/task_115.py --users "$u" --time_range "$RANGE"
           done
