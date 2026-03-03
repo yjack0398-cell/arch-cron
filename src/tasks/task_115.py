@@ -15,6 +15,7 @@ load_dotenv()
 async def main():
     parser = argparse.ArgumentParser(description="X 平台抓取并上传至 115网盘 工作流")
     parser.add_argument('--users', type=str, required=True, help="逗号分隔的 X 用户名列表")
+    parser.add_argument('--time_range', type=str, default="3天", help="要抓取的时间范围选项")
     args = parser.parse_args()
     
     users = [u.strip() for u in args.users.split(',') if u.strip()]
@@ -31,8 +32,8 @@ async def main():
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     for user in users:
-        print(f"\n🚀 开始处理 [115网盘] 备份任务: {user}")
-        scraper = XScraper(username=user, cookies_raw=cookies_x)
+        print(f"\n🚀 开始处理 [115网盘] 备份任务: {user} | 范围: {args.time_range}")
+        scraper = XScraper(username=user, time_range=args.time_range, cookies_raw=cookies_x)
         files = await scraper.fetch_media_files()
         
         if files:

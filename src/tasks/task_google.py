@@ -38,8 +38,8 @@ async def main():
          
     for user in users:
         print(f"\n🚀 开始处理 [Google Photos] 备份任务: {user}")
-        scraper = XScraper(username=user, cookies_raw=cookies_x)
-        files = await scraper.fetch_media_files(time_range=time_range)
+        scraper = XScraper(username=user, time_range=time_range, cookies_raw=cookies_x)
+        files = await scraper.fetch_media_files()
         
         if files:
             album_name = f"X_Archive_{user}"
