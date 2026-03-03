@@ -16,8 +16,8 @@ jobs:
         env:
           USERS: ${{ secrets.TWITTER_USERS_ARCHIVE }}
         run: |
-          CLEAN_USERS=$(echo "$USERS" | tr -d ' ' )
-          JSON_ARRAY=$(jq -Rc 'split(",") | map(select(length > 0)) | _nwise(5) | map(join(","))' <<< "$CLEAN_USERS")
+          CLEAN_USERS=$(echo "$USERS" | tr -d ' ')
+          JSON_ARRAY=$(python3 -c "import sys, json; users = [u for u in sys.argv[1].split(',') if u]; chunks = [','.join(users[i:i+5]) for i in range(0, len(users), 5)]; print(json.dumps(chunks))" "$CLEAN_USERS")
           echo "Generated matrix JSON: $JSON_ARRAY"
           echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
 
