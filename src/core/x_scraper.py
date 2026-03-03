@@ -227,6 +227,9 @@ class XScraper:
         all_files = glob.glob(f"{self.user_download_dir}/**/*", recursive=True)
         files = [f for f in all_files if os.path.isfile(f)]
         
+        # 按照新到旧进行排序 (优先依赖文件的 mtime 属性，因为 gallery-dl 默认会将文件的修改时间设为推文发布时间)
+        files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+        
         if not files:
             print(f"⚠️ [{self.username}] 下载管线结束，但没有抓到文件。")
             return []

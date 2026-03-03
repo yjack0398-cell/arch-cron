@@ -121,6 +121,8 @@ class Uploader115:
                 try:
                     self._upload_file(local_file, date_cid)
                     print(f"  ✅ {filename} 上传成功")
+                    import time
+                    time.sleep(1)
                 except Exception as ue:
                     print(f"  ❌ {filename} 上传失败: {ue}")
         except Exception as e:

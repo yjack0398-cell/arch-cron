@@ -35,32 +35,51 @@ class GooglePhotosUploader:
         注意：API 只能列出由当前应用（Client ID）创建的相册。
         """
         if album_name in self._album_cache:
+            if self._album_cache[album_name] is None:
+                return None
             return self._album_cache[album_name]
 
-        try:
-            # 首先列出相册
-            response = self.service.albums().list(pageSize=50, excludeNonAppCreatedData=True).execute()
-            albums = response.get('albums', [])
+        max_retries = 4
+        for attempt in range(max_retries):
+            try:
+                # 首先列出相册
+                response = self.service.albums().list(pageSize=50, excludeNonAppCreatedData=True).execute()
+                albums = response.get('albums', [])
 
-            for album in albums:
-                if album.get('title') == album_name:
-                    self._album_cache[album_name] = album.get('id')
-                    return album.get('id')
+                for album in albums:
+                    if album.get('title') == album_name:
+                        self._album_cache[album_name] = album.get('id')
+                        return album.get('id')
 
-            # 如果不存在，则创建新相册
-            print(f"  📂 (Google Photos) 正在新建相册: {album_name}")
-            create_body = {
-                "album": {
-                    "title": album_name
+                # 如果不存在，则创建新相册
+                print(f"  📂 (Google Photos) 正在新建相册: {album_name}")
+                create_body = {
+                    "album": {
+                        "title": album_name
+                    }
                 }
-            }
-            new_album = self.service.albums().create(body=create_body).execute()
-            self._album_cache[album_name] = new_album.get('id')
-            return new_album.get('id')
+                new_album = self.service.albums().create(body=create_body).execute()
+                self._album_cache[album_name] = new_album.get('id')
+                return new_album.get('id')
+                
+            except HttpError as e:
+                if e.resp.status == 429:
+                    wait_time = 15 * (attempt + 1)
+                    print(f"⚠️  (Google Photos) 相册API触发速率限制 (429)，等待 {wait_time} 秒后重试 ({attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"❌ (Google Photos) 获取/创建相册失败 (HttpError): {e}")
+                    self._album_cache[album_name] = None
+                    return None
+            except Exception as e:
+                print(f"❌ (Google Photos) 获取/创建相册过程发生异常: {e}")
+                self._album_cache[album_name] = None
+                return None
 
-        except Exception as e:
-            print(f"❌ (Google Photos) 获取/创建相册失败: {e}")
-            return None
+        # 如果尝试全部失败，标记为空以防止后续相同文件的风暴轰炸
+        print(f"❌ (Google Photos) {album_name} 获取/创建重试耗尽。")
+        self._album_cache[album_name] = None
+        return None
 
     def _upload_bytes(self, local_file: str) -> str:
         """
