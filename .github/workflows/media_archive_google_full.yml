@@ -19,9 +19,9 @@ jobs:
         run: |
           # 去除所有空格，处理类似 "user1, user2" 的输入
           CLEAN_USERS=$(echo "${{ github.event.inputs.users }}" | tr -d ' ')
-          # 利用 python 将逗号分隔字符串转化为每 5 个一组的 JSON 数组块 (丢弃空元素)
-          JSON_ARRAY=$(python3 -c "import sys, json; users = [u for u in sys.argv[1].split(',') if u]; chunks = [','.join(users[i:i+5]) for i in range(0, len(users), 5)]; print(json.dumps(chunks))" "$CLEAN_USERS")
-          echo "Generated matrix JSON: $JSON_ARRAY"
+          # 利用 python 将逗号分隔字符串转化为每 1 个一组的 JSON 数组块 (全量抓取超时风险极高，强制分配为单人单坑)
+          JSON_ARRAY=$(python3 -c "import sys, json; users = [u for u in sys.argv[1].split(',') if u]; size = 1; chunks = [','.join(users[i:i+size]) for i in range(0, len(users), size)]; print(json.dumps(chunks))" "$CLEAN_USERS")
+          echo "Generated matrix JSON (chunk size 1): $JSON_ARRAY"
           echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
 
   archive_google_full:

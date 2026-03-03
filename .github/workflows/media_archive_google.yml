@@ -17,8 +17,14 @@ jobs:
           USERS: ${{ secrets.TWITTER_USERS_ARCHIVE }}
         run: |
           CLEAN_USERS=$(echo "$USERS" | tr -d ' ')
-          JSON_ARRAY=$(python3 -c "import sys, json; users = [u for u in sys.argv[1].split(',') if u]; chunks = [','.join(users[i:i+5]) for i in range(0, len(users), 5)]; print(json.dumps(chunks))" "$CLEAN_USERS")
-          echo "Generated matrix JSON: $JSON_ARRAY"
+          TIME_RANGE_INPUT="${{ github.event.inputs.time_range }}"
+          if [[ "$TIME_RANGE_INPUT" == "1年" || "$TIME_RANGE_INPUT" == "全部" ]]; then
+            CHUNK_SIZE=2
+          else
+            CHUNK_SIZE=5
+          fi
+          JSON_ARRAY=$(python3 -c "import sys, json; users = [u for u in sys.argv[1].split(',') if u]; size = int(sys.argv[2]); chunks = [','.join(users[i:i+size]) for i in range(0, len(users), size)]; print(json.dumps(chunks))" "$CLEAN_USERS" "$CHUNK_SIZE")
+          echo "Generated matrix JSON (chunk size $CHUNK_SIZE): $JSON_ARRAY"
           echo "matrix=$JSON_ARRAY" >> $GITHUB_OUTPUT
 
   archive_google:
