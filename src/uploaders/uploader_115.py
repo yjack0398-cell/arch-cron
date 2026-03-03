@@ -2,15 +2,25 @@ import os
 import glob
 from p115client import P115Client
 
-from core.utils.cookie_utils import parse_cookies_to_string
-
 class Uploader115:
     def __init__(self, cookies_raw: str):
         self.cookies_raw = cookies_raw
         self.client = self._login()
 
+    def _parse_cookies_to_string(self, raw: str) -> str:
+        if not raw:
+            return ""
+        try:
+            import json
+            data = json.loads(raw)
+            if isinstance(data, list):
+                return "; ".join([f"{c.get('name')}={c.get('value')}" for c in data if c.get('name') and c.get('value')])
+        except Exception:
+            pass
+        return raw
+
     def _login(self):
-        cookie_str = parse_cookies_to_string(self.cookies_raw)
+        cookie_str = self._parse_cookies_to_string(self.cookies_raw)
         if not cookie_str:
             print("❌ 无法解析 115 Cookie")
             return None
@@ -81,7 +91,7 @@ class Uploader115:
                     sha1.update(chunk)
             file_sha1 = sha1.hexdigest().upper()
             
-            cookie_str = parse_cookies_to_string(self.cookies_raw)
+            cookie_str = self._parse_cookies_to_string(self.cookies_raw)
             headers = {'Cookie': cookie_str, 'User-Agent': 'Mozilla/5.0'}
             
             init_url = 'https://uplb.115.com/3.0/sampleinitupload.php'
