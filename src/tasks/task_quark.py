@@ -79,7 +79,7 @@ async def main():
             files = await scraper.fetch_media_files()
             
             if files:
-                await uploader.upload_files(files=files, remote_root="Twitter_Archive")
+                await uploader.upload_files(files=files, remote_root=f"Twitter_Archive/{user}")
             else:
                 print(f"  ℹ️ {user}: 没有发现新的媒体文件")
             scraper.cleanup()

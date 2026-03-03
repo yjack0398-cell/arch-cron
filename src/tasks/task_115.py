@@ -28,8 +28,6 @@ async def main():
 
     uploader = Uploader115(cookies_raw=cookies_115)
     
-    from datetime import datetime
-    today_str = datetime.now().strftime("%Y-%m-%d")
 
     for user in users:
         print(f"\n🚀 开始处理 [115网盘] 备份任务: {user} | 范围: {args.time_range}")
@@ -40,8 +38,7 @@ async def main():
             uploader.upload_files(
                 files=files,
                 remote_root="Twitter_Archive",
-                user_name=user,
-                today_str=today_str
+                user_name=user
             )
         scraper.cleanup()
 

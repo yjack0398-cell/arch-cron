@@ -116,7 +116,7 @@ class Uploader115:
         except ImportError:
             raise Exception("需要安装 requests 库")
 
-    def upload_files(self, files: list, remote_root: str, user_name: str, today_str: str):
+    def upload_files(self, files: list, remote_root: str, user_name: str):
         if not self.client: return
         if not files: return
         
@@ -124,12 +124,11 @@ class Uploader115:
         try:
             archive_cid = self.get_or_create_cid(0, remote_root)
             user_cid = self.get_or_create_cid(archive_cid, user_name)
-            date_cid = self.get_or_create_cid(user_cid, today_str)
             
             for local_file in files:
                 filename = os.path.basename(local_file)
                 try:
-                    self._upload_file(local_file, date_cid)
+                    self._upload_file(local_file, user_cid)
                     print(f"  ✅ {filename} 上传成功")
                     import time
                     time.sleep(1)
