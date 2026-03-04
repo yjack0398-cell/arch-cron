@@ -67,9 +67,10 @@ class UploaderQuark:
             print(f"❌ 夸克网盘页面加载失败或未登录: {e}")
             return False
 
-    async def _navigate_to_folder(self, folder_path: str):
+    async def _navigate_to_folder(self, folder_path: str) -> bool:
         """
         进入多层级文件夹（如 Twitter_Archive/User），不存在则创建
+        增加严格的校验，防止进入错误目录或产生垃圾文件夹
 
         Args:
             folder_path: 目标路径，如 "Twitter_Archive/User"
@@ -77,65 +78,87 @@ class UploaderQuark:
         parts = [p.strip() for p in folder_path.split('/') if p.strip()]
         
         # 回到根目录开始导航
+        print(f"  🔍 导航至目录: {folder_path}")
         await self.page.goto(self.PAN_URL, timeout=self.TIMEOUT_PAGE_LOAD)
         
         for part in parts:
             try:
-                await self.page.wait_for_selector(
-                    self.SELECTOR_FILE_LIST, timeout=self.TIMEOUT_LOGIN_CHECK
-                )
-                await asyncio.sleep(2)
+                # 等待文件列表加载
+                await self.page.wait_for_selector(self.SELECTOR_FILE_LIST, timeout=self.TIMEOUT_LOGIN_CHECK)
+                await asyncio.sleep(2) # 给予 UI 渲染缓冲
 
-                # 尝试点击已存在的文件夹
+                # 寻找目标文件夹
                 folder_locators = [
                     self.page.get_by_text(part, exact=True).first,
                     self.page.locator(f'a[title="{part}"]').first,
                     self.page.locator(f'div[title="{part}"]').first
                 ]
                 
-                found = False
-                for folder_link in folder_locators:
-                    if await folder_link.count() > 0:
-                        print(f"  📂 进入文件夹: {part}")
-                        await folder_link.dblclick(timeout=self.TIMEOUT_FOLDER_ACTION)
-                        await asyncio.sleep(3)
-                        found = True
+                found_el = None
+                for loc in folder_locators:
+                    if await loc.count() > 0:
+                        found_el = loc
                         break
 
-                if not found:
-                    print(f"  📂 未发现 [{part}]，尝试新建...")
-                    # 点击“新建”
+                if found_el:
+                    print(f"  📂 发现已有文件夹: {part}，尝试进入...")
+                    await found_el.dblclick(timeout=self.TIMEOUT_FOLDER_ACTION)
+                    await asyncio.sleep(3)
+                else:
+                    print(f"  🆕 未发现 [{part}]，启动可靠创建流程...")
+                    # 1. 点击新建
                     create_btn = self.page.get_by_text("新建", exact=True).first
                     if await create_btn.count() == 0:
                         create_btn = self.page.locator('button:has-text("新建")').first
                     
-                    if await create_btn.count() > 0:
-                        await create_btn.click()
-                        await asyncio.sleep(1)
-                        # 点击下拉菜单里的“新建文件夹”
-                        mkdir_item = self.page.locator('.ant-dropdown-menu-item:has-text("文件夹")').first
-                        if await mkdir_item.count() == 0:
-                            mkdir_item = self.page.get_by_text("新建文件夹", exact=True).last
-                        
-                        await mkdir_item.click()
-                        await asyncio.sleep(1)
+                    if await create_btn.count() == 0:
+                        raise Exception(f"找不到'新建'按钮")
 
-                        # 输入文件夹名
-                        name_input = self.page.locator('input.ant-input, input[type="text"]').last
-                        await name_input.fill(part)
-                        await asyncio.sleep(0.5)
-                        # 点击确认
-                        ok_btn = self.page.get_by_text("确 定", exact=False).last
-                        await ok_btn.click()
-                        await asyncio.sleep(3)
+                    await create_btn.click()
+                    await asyncio.sleep(1)
+
+                    # 2. 选择新建文件夹
+                    mkdir_item = self.page.locator('.ant-dropdown-menu-item:has-text("文件夹")').first
+                    if await mkdir_item.count() == 0:
+                        mkdir_item = self.page.get_by_text("新建文件夹", exact=True).last
+                    
+                    await mkdir_item.click()
+                    await asyncio.sleep(1.5)
+
+                    # 3. 输入名称并确认
+                    name_input = self.page.locator('input.ant-input, input[type="text"]').last
+                    if await name_input.count() == 0:
+                        raise Exception(f"新建文件夹模态框输入框未出现")
                         
-                        # 再次双击进入
-                        await self.page.get_by_text(part, exact=True).first.dblclick()
-                        await asyncio.sleep(2)
+                    await name_input.fill(part)
+                    await asyncio.sleep(1) # 等待输入字符渲染
+                    
+                    # 点击确认按钮
+                    # 夸克确认按钮通常有 "确定" 或 "确 定" (含空格)
+                    ok_btn = self.page.locator('.ant-modal-footer button.ant-btn-primary').last
+                    if await ok_btn.count() == 0:
+                        ok_btn = self.page.get_by_text("确 定", exact=False).last
+                    
+                    await ok_btn.click()
+                    
+                    # 4. 等待模态框消失（极其重要！否则夸克会因为操作太快重置为默认名）
+                    await self.page.wait_for_selector('.ant-modal-mask', state='hidden', timeout=10000)
+                    print(f"  ✅ 文件夹 [{part}] 理论创建成功，检查列表更新...")
+                    await asyncio.sleep(3)
+
+                    # 5. 再次验证并双击进入
+                    recheck_el = self.page.get_by_text(part, exact=True).first
+                    if await recheck_el.count() > 0:
+                        await recheck_el.dblclick()
+                        await asyncio.sleep(3)
+                    else:
+                        raise Exception(f"创建文件夹 [{part}] 后，在列表中未找到。可能重命名失败。")
                 
+                # 每走一层都做一次简单的 URL 或标题校验（可选，此处通过下一循环的 wait_for_selector 保证）
             except Exception as e:
-                print(f"  ⚠️ 文件夹导航过程中断 [{part}]: {e}")
+                print(f"  ❌ 目录导航/创建失败 [{part}]: {e}")
                 return False
+        
         return True
 
     async def _upload_single_file(self, file_path: str) -> bool:
@@ -273,11 +296,19 @@ class UploaderQuark:
                 return
 
             # 创建/进入目标文件夹
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            await self._navigate_to_folder(remote_root)
+            if not await self._navigate_to_folder(remote_root):
+                print(f"  ❌ 无法导航到目标文件夹 [{remote_root}]。为防止根目录污染，已放弃本次上传。")
+                return
 
-            # 可选: 创建日期子文件夹
-            # await self._navigate_to_folder(today_str)
+            # 获取当前页面的文件列表（用于上传前跳过已存在的文件）
+            print("  📊 正在获取已存在文件列表以加速归档...")
+            existing_files = []
+            try:
+                # 夸克文件列表文本通常包含在 table cell 里
+                cell_nodes = await self.page.locator('.ant-table-cell').all_text_contents()
+                existing_files = [n.strip() for n in cell_nodes if n.strip()]
+            except:
+                pass
 
             # 逐个上传文件
             success_count = 0
@@ -290,6 +321,13 @@ class UploaderQuark:
                     continue
 
                 filename = os.path.basename(local_file)
+                
+                # 简单排重检查
+                if filename in existing_files:
+                    print(f"  ⏩ [{i}/{len(files)}] 跳过 (已存在): {filename}")
+                    success_count += 1
+                    continue
+
                 print(f"\n  [{i}/{len(files)}] 上传: {filename}")
 
                 if await self._upload_single_file(local_file):
