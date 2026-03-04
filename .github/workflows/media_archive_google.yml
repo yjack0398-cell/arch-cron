@@ -4,6 +4,23 @@ on:
   schedule:
     - cron: "0 0 * * *" # UTC 00:00 -> CST 早上 08:00
   workflow_dispatch:
+    inputs:
+      time_range:
+        description: "抓取时间范围"
+        required: true
+        default: "3天"
+        type: choice
+        options:
+          - "当天"
+          - "3天"
+          - "1周"
+          - "1个月"
+          - "1年"
+          - "全部"
+      custom_users:
+        description: "自定义用户名列表 (逗号分隔，留空则使用内置秘密名单)"
+        required: false
+        default: ""
 
 jobs:
   setup-matrix:
@@ -14,8 +31,10 @@ jobs:
       - name: Generate Matrix
         id: set-matrix
         env:
-          USERS: ${{ secrets.TWITTER_USERS_ARCHIVE }}
+          USERS_SECRET: ${{ secrets.TWITTER_USERS_ARCHIVE }}
+          CUSTOM_USERS: ${{ github.event.inputs.custom_users }}
         run: |
+          USERS="${CUSTOM_USERS:-$USERS_SECRET}"
           CLEAN_USERS=$(echo "$USERS" | tr -d ' ')
           TIME_RANGE_INPUT="${{ github.event.inputs.time_range }}"
           if [[ "$TIME_RANGE_INPUT" == "1年" || "$TIME_RANGE_INPUT" == "全部" ]]; then
@@ -60,8 +79,9 @@ jobs:
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
           GOOGLE_PHOTOS_TOKEN: ${{ secrets.GOOGLE_PHOTOS_TOKEN }}
         run: |
+          RANGE="${{ github.event.inputs.time_range || '3天' }}"
           IFS=',' read -ra ADDR <<< "${{ matrix.user }}"
           for u in "${ADDR[@]}"; do
             echo "Processing user: $u"
-            python src/tasks/task_google.py --users "$u" --time_range "3天"
+            python src/tasks/task_google.py --users "$u" --time_range "$RANGE"
           done
