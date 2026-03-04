@@ -120,6 +120,17 @@ class XScraper:
         print(f"🔎 正在扫描主页 (目标范围: {self.time_range}): https://x.com/{self.username}")
         try:
             await page.goto(f"https://x.com/{self.username}", timeout=60000)
+            
+            # 应对 "Yes, view profile" 整个账号级别的敏感弹窗警告
+            try:
+                view_profile_btn = page.get_by_text("Yes, view profile", exact=True).first
+                if await view_profile_btn.count() > 0:
+                    print("  ⚠️ 检测到账号级敏感警告弹窗，自动确认中...")
+                    await view_profile_btn.click()
+                    await asyncio.sleep(2)
+            except Exception:
+                pass
+                
             try:
                  await page.wait_for_selector('article[data-testid="tweet"]', timeout=30000)
             except Exception as e:
@@ -143,6 +154,12 @@ class XScraper:
                 articles = await page.locator('article[data-testid="tweet"]').all()
                 for article in articles:
                     try:
+                        # 检查并点击可能遮挡推文媒体的 "View" (敏感内容遮罩)
+                        view_btn = article.get_by_text("View", exact=True).first
+                        if await view_btn.count() > 0:
+                            await view_btn.click()
+                            await asyncio.sleep(0.5)
+
                         # 检查推文时间
                         time_loc = article.locator('time').first
                         if await time_loc.count() > 0:
