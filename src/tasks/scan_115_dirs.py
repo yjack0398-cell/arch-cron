@@ -17,6 +17,7 @@ import json
 import re
 import argparse
 import time
+import random
 from typing import Dict, List, Tuple
 
 # 将 src 目录添加到 sys.path
@@ -173,13 +174,17 @@ def scan_115_recursive(client: P115Client, current_cid: int, current_path: str, 
                 if retry_count > 3:
                     print(f"  {'  ' * current_depth}⚠️ 网络请求发生连续异常: {req_e}")
                     break
-                print(f"  {'  ' * current_depth}⏳ 请求受限或异常，等待 3 秒后重试... ({retry_count}/3)")
-                time.sleep(3)
+                
+                # 针对 405 错误，通常意味着被 115 临时限制，需要大幅度休眠
+                wait_time = 10 * retry_count + random.randint(5, 15)
+                print(f"  {'  ' * current_depth}⏳ 请求受限(405)或异常，强制休眠 {wait_time} 秒后重试... ({retry_count}/3)")
+                time.sleep(wait_time)
                 continue
             
-            # 正常请求后清零重试计数，并加很小的延迟防止被 115 继续限流
+            # 正常请求后清零重试计数
             retry_count = 0
-            time.sleep(0.5)
+            # 使用随机延迟 (0.8s - 2.5s) 模拟人类行为，防范 115 的频率检测
+            time.sleep(random.uniform(0.8, 2.5))
             
             if not batch:
                 break
