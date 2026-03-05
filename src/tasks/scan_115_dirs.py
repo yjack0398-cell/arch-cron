@@ -16,6 +16,7 @@ import sys
 import json
 import re
 import argparse
+import time
 from typing import Dict, List, Tuple
 
 # 将 src 目录添加到 sys.path
@@ -107,6 +108,15 @@ def analyze_directory_content(files: List[dict]) -> Tuple[str, int, int]:
         # 去除通常的无用前缀如 [115.com] 等
         name = re.sub(r'\[.*?\]', '', name)
         
+        # 提取经常包含在最前面的广告网址前缀，如 "hhd800.com@FNS-139" => 截断 @
+        if '@' in name:
+            name = name.split('@')[-1]
+            
+        # 移除部分顽固的站名/字符串特征，避免误导番号正则（例如 hhd800 完美符合 3字母+数字正则）
+        name = re.sub(r'(hhd800|fsm\d+|115\.com|hdza)', '', name, flags=re.IGNORECASE)
+        # 去掉如 "m.xxx.com-番号" 中的网址部分
+        name = re.sub(r'[a-zA-Z0-9_-]+\.(com|net|org|cn|tv|cc|vip|xyz).*?[-_]', '', name, flags=re.IGNORECASE)
+        
         match = PATTERN_SERIAL.search(name)
         if match:
             # 标准化前缀：全部大写，始终带一个连字符
@@ -148,12 +158,29 @@ def scan_115_recursive(client: P115Client, current_cid: int, current_path: str, 
         items = []
         offset = 0
         limit = 100
+        retry_count = 0
         while True:
-            resp = client.fs_files({'cid': current_cid, 'offset': offset, 'limit': limit})
-            if not resp.get('state') or 'data' not in resp:
-                break
+            try:
+                resp = client.fs_files({'cid': current_cid, 'offset': offset, 'limit': limit})
                 
-            batch = resp['data']
+                if not resp or not resp.get('state') or 'data' not in resp:
+                    break
+                    
+                batch = resp['data']
+            except Exception as req_e:
+                # 捕获 405 Method Not Allowed 等由于请求过快的错误
+                retry_count += 1
+                if retry_count > 3:
+                    print(f"  {'  ' * current_depth}⚠️ 网络请求发生连续异常: {req_e}")
+                    break
+                print(f"  {'  ' * current_depth}⏳ 请求受限或异常，等待 3 秒后重试... ({retry_count}/3)")
+                time.sleep(3)
+                continue
+            
+            # 正常请求后清零重试计数，并加很小的延迟防止被 115 继续限流
+            retry_count = 0
+            time.sleep(0.5)
+            
             if not batch:
                 break
                 
