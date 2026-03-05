@@ -133,13 +133,24 @@ class UploaderQuark:
                     await name_input.fill(part)
                     await asyncio.sleep(1) # 等待输入字符渲染
                     
-                    # 点击确认按钮
-                    # 夸克确认按钮通常有 "确定" 或 "确 定" (含空格)
-                    ok_btn = self.page.locator('.ant-modal-footer button.ant-btn-primary').last
-                    if await ok_btn.count() == 0:
-                        ok_btn = self.page.get_by_text("确 定", exact=False).last
+                    # 首先尝试最稳定底层的确体方式：在输入框内直接敲击回车键
+                    await name_input.press("Enter")
+                    await asyncio.sleep(1)
                     
-                    await ok_btn.click()
+                    # 检查模态框是否依然存在 (如果回车没生效，尝试备用的按钮点击方案)
+                    if await self.page.locator('.ant-modal-mask').is_visible():
+                        print(f"  ⌨️ 回车确认似乎未生效，尝试备用按钮点击...")
+                        ok_btn_selectors = [
+                            self.page.locator('.ant-modal-footer button.ant-btn-primary').last,
+                            self.page.get_by_text("确 定", exact=False).last,
+                            self.page.get_by_text("确认", exact=False).last,
+                            self.page.locator('button:has-text("确 定")').last
+                        ]
+                        
+                        for btn in ok_btn_selectors:
+                            if await btn.count() > 0 and await btn.is_visible():
+                                await btn.click()
+                                break
                     
                     # 4. 等待模态框消失（极其重要！否则夸克会因为操作太快重置为默认名）
                     await self.page.wait_for_selector('.ant-modal-mask', state='hidden', timeout=10000)
