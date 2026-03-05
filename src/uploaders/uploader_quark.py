@@ -358,3 +358,193 @@ class UploaderQuark:
             if self.page and not self.page.is_closed():
                 await self.page.close()
                 self.page = None
+
+    # =========================================================
+    # 离线下载 & 文件移动（磁力工作流专用）
+    # =========================================================
+
+    async def add_offline_download(self, magnet_url: str) -> bool:
+        """
+        通过浏览器模拟将磁力链接提交到夸克网盘的"云下载"(离线下载)队列
+
+        Args:
+            magnet_url: 以 magnet:?xt=urn:btih: 开头的完整磁力链接
+
+        Returns:
+            是否成功提交
+        """
+        if not magnet_url or not magnet_url.startswith("magnet:"):
+            print("  ❌ 无效的磁力链接格式")
+            return False
+
+        print(f"  🧲 正在提交离线下载任务: {magnet_url[:60]}...")
+
+        try:
+            if not await self._ensure_page():
+                return False
+
+            # 回到网盘主页
+            await self.page.goto(self.PAN_URL, timeout=self.TIMEOUT_PAGE_LOAD)
+            await asyncio.sleep(2)
+
+            # 方式 1: 寻找"云下载"或"离线下载"入口按钮
+            # 夸克网盘通常在顶部工具栏有"云下载"按钮
+            cloud_dl_btn_selectors = [
+                self.page.get_by_text("云下载", exact=False).first,
+                self.page.get_by_text("离线下载", exact=False).first,
+                self.page.locator('button:has-text("云下载")').first,
+                self.page.locator('[class*="cloud-download"], [class*="offline"]').first,
+            ]
+
+            clicked = False
+            for btn in cloud_dl_btn_selectors:
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click()
+                    await asyncio.sleep(2)
+                    clicked = True
+                    break
+
+            if not clicked:
+                print("  ⚠️ 未找到'云下载'按钮，尝试直接导航到离线下载页面...")
+                # 降级方案：直接访问离线下载页面 URL
+                await self.page.goto("https://pan.quark.cn/list#/list/all/offline", timeout=self.TIMEOUT_PAGE_LOAD)
+                await asyncio.sleep(3)
+
+            # 点击"新建链接任务"按钮
+            new_task_selectors = [
+                self.page.get_by_text("新建链接任务", exact=False).first,
+                self.page.get_by_text("新建任务", exact=False).first,
+                self.page.get_by_text("添加链接", exact=False).first,
+                self.page.locator('button:has-text("新建")').first,
+            ]
+
+            for btn in new_task_selectors:
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click()
+                    await asyncio.sleep(2)
+                    break
+
+            # 在弹出的模态框中找到输入框并粘贴磁力链接
+            link_input_selectors = [
+                self.page.locator('textarea').first,
+                self.page.locator('input[placeholder*="链接"], input[placeholder*="magnet"], input[placeholder*="http"]').first,
+                self.page.locator('.ant-input, .ant-input-lg').first,
+            ]
+
+            input_filled = False
+            for inp in link_input_selectors:
+                if await inp.count() > 0 and await inp.is_visible():
+                    await inp.fill(magnet_url)
+                    await asyncio.sleep(1)
+                    input_filled = True
+                    break
+
+            if not input_filled:
+                print("  ❌ 未找到磁力链接输入框")
+                return False
+
+            # 点击确认/开始下载按钮
+            confirm_selectors = [
+                self.page.get_by_text("开始下载", exact=False).first,
+                self.page.get_by_text("确 定", exact=False).first,
+                self.page.get_by_text("确认", exact=False).first,
+                self.page.locator('.ant-btn-primary').last,
+            ]
+
+            for btn in confirm_selectors:
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click()
+                    await asyncio.sleep(3)
+                    print("  ✅ 磁力离线下载任务已提交")
+                    return True
+
+            # 备用方案：按 Enter 键确认
+            await self.page.keyboard.press("Enter")
+            await asyncio.sleep(3)
+            print("  ✅ 磁力离线下载任务已提交（回车确认）")
+            return True
+
+        except Exception as e:
+            print(f"  ❌ 提交离线下载失败: {e}")
+            return False
+        finally:
+            if self.page and not self.page.is_closed():
+                await self.page.close()
+                self.page = None
+
+    async def move_file_in_drive(self, file_name: str, target_folder_path: str) -> bool:
+        """
+        在夸克网盘内将指定文件移动到目标文件夹
+
+        Args:
+            file_name: 要移动的文件名
+            target_folder_path: 目标文件夹路径（如 "zPP系列"）
+
+        Returns:
+            是否移动成功
+        """
+        print(f"  📦 正在移动文件 [{file_name}] -> [{target_folder_path}]")
+
+        try:
+            if not await self._ensure_page():
+                return False
+
+            await self.page.goto(self.PAN_URL, timeout=self.TIMEOUT_PAGE_LOAD)
+            await asyncio.sleep(3)
+
+            # 查找并选中目标文件（通过右键菜单或复选框）
+            file_el = self.page.get_by_text(file_name, exact=False).first
+            if await file_el.count() == 0:
+                print(f"  ⚠️ 在当前目录未找到文件: {file_name}")
+                return False
+
+            # 右键点击弹出上下文菜单
+            await file_el.click(button="right")
+            await asyncio.sleep(1.5)
+
+            # 选择"移动到"选项
+            move_selectors = [
+                self.page.get_by_text("移动到", exact=False).first,
+                self.page.get_by_text("移动", exact=True).first,
+                self.page.locator('.ant-dropdown-menu-item:has-text("移动")').first,
+            ]
+
+            for btn in move_selectors:
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click()
+                    await asyncio.sleep(2)
+                    break
+
+            # 在弹出的文件夹选择面板中找到目标文件夹
+            parts = [p.strip() for p in target_folder_path.split('/') if p.strip()]
+            for part in parts:
+                folder_el = self.page.get_by_text(part, exact=True).first
+                if await folder_el.count() > 0:
+                    await folder_el.click()
+                    await asyncio.sleep(1)
+
+            # 点击确认移动
+            confirm_move = [
+                self.page.get_by_text("移动到此", exact=False).first,
+                self.page.get_by_text("确 定", exact=False).first,
+                self.page.locator('.ant-btn-primary').last,
+            ]
+
+            for btn in confirm_move:
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click()
+                    await asyncio.sleep(2)
+                    print(f"  ✅ 文件 [{file_name}] 已成功移动至 [{target_folder_path}]")
+                    return True
+
+            print(f"  ⚠️ 移动操作的确认按钮未找到")
+            return False
+
+        except Exception as e:
+            print(f"  ❌ 移动文件失败: {e}")
+            return False
+        finally:
+            if self.page and not self.page.is_closed():
+                await self.page.close()
+                self.page = None
+

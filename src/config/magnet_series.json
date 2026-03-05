@@ -1,0 +1,28 @@
+{
+  "_说明": "每个 key 是夸克网盘中对应目录名；prefix 是搜索前缀；last_number 是已知最新编号（0=未初始化，需手动补）；enabled 控制是否参与自动扫描",
+  "zPP系列": {
+    "prefix": "PP-",
+    "last_number": 0,
+    "enabled": true
+  },
+  "zDigital Ark公司": {
+    "prefix": "DLDSS-",
+    "last_number": 0,
+    "enabled": true
+  },
+  "嘘嘘1": {
+    "prefix": "SIS-",
+    "last_number": 1,
+    "enabled": true
+  },
+  "嘘嘘2": {
+    "prefix": "MIDV-",
+    "last_number": 0,
+    "enabled": true
+  },
+  "嘘嘘3": {
+    "prefix": "IPZZ-",
+    "last_number": 0,
+    "enabled": true
+  }
+}
