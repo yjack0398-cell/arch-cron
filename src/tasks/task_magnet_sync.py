@@ -10,7 +10,7 @@
 6. 更新 magnet_series.json 中的 last_number
 
 用法:
-    python src/tasks/task_magnet_sync.py [--dry_run] [--series "zPP系列"]
+    python src/tasks/task_magnet_sync.py [--dry_run] [--series "zPP系列"] [--target quark|115]
 """
 
 import os
@@ -115,6 +115,8 @@ async def main():
                         help="演习模式：只搜索不提交（默认关闭）")
     parser.add_argument('--series', type=str, default=None,
                         help="指定只处理某个系列（如 'zPP系列'），不指定则处理全部启用的系列")
+    parser.add_argument('--target', type=str, default='quark', choices=['quark', '115'],
+                        help="目标云盘（quark 或 115，默认 quark）")
     parser.add_argument('--check_count', type=int, default=3,
                         help="每个系列向前探测的编号数量（默认3）")
     args = parser.parse_args()
@@ -146,60 +148,69 @@ async def main():
     from core.magnet_scraper import MagnetScraper
     scraper = MagnetScraper()
 
-    # 初始化夸克上传器（仅非演习模式需要 Playwright）
+    # 初始化上传器
     uploader = None
     pw = None
     browser = None
 
     if not args.dry_run:
-        from playwright.async_api import async_playwright
-        pw = await async_playwright().start()
-        browser = await pw.chromium.launch(
-            headless=True,
-            args=[
-                '--disable-blink-features=AutomationControlled',
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-            ]
-        )
-        context = await browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                       'AppleWebKit/537.36 (KHTML, like Gecko) '
-                       'Chrome/120.0.0.0 Safari/537.36',
-            viewport={'width': 1920, 'height': 1080},
-        )
+        if args.target == 'quark':
+            from playwright.async_api import async_playwright
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                ]
+            )
+            context = await browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 (KHTML, like Gecko) '
+                           'Chrome/120.0.0.0 Safari/537.36',
+                viewport={'width': 1920, 'height': 1080},
+            )
 
-        cookies_quark = os.getenv("COOKIES_QUARK")
-        if not cookies_quark:
-            print("❌ 非演习模式下必须配置 COOKIES_QUARK 环境变量")
-            await browser.close()
-            await pw.stop()
-            return
+            cookies_quark = os.getenv("COOKIES_QUARK")
+            if not cookies_quark:
+                print("❌ 非演习模式下目标为 quark 时必须配置 COOKIES_QUARK 环境变量")
+                await browser.close()
+                await pw.stop()
+                return
 
-        try:
-            cookies = json.loads(cookies_quark)
-            clean_list = []
-            for c in cookies:
-                domain = c.get('domain', '')
-                if domain.endswith('quark.cn'):
-                    domain = '.quark.cn'
-                clean = {
-                    'name': c.get('name', ''),
-                    'value': c.get('value', ''),
-                    'domain': domain,
-                    'path': c.get('path', '/'),
-                }
-                clean_list.append(clean)
-            await context.add_cookies(clean_list)
-            print(f"✅ 已加载 {len(clean_list)} 条夸克 Cookie")
-        except Exception as e:
-            print(f"❌ 解析夸克 Cookies 失败: {e}")
-            await browser.close()
-            await pw.stop()
-            return
+            try:
+                cookies = json.loads(cookies_quark)
+                clean_list = []
+                for c in cookies:
+                    domain = c.get('domain', '')
+                    if domain.endswith('quark.cn'):
+                        domain = '.quark.cn'
+                    clean = {
+                        'name': c.get('name', ''),
+                        'value': c.get('value', ''),
+                        'domain': domain,
+                        'path': c.get('path', '/'),
+                    }
+                    clean_list.append(clean)
+                await context.add_cookies(clean_list)
+                print(f"✅ 已加载 {len(clean_list)} 条夸克 Cookie")
+            except Exception as e:
+                print(f"❌ 解析夸克 Cookies 失败: {e}")
+                await browser.close()
+                await pw.stop()
+                return
 
-        from uploaders.uploader_quark import UploaderQuark
-        uploader = UploaderQuark(cookies_raw=cookies_quark, browser_context=context)
+            from uploaders.uploader_quark import UploaderQuark
+            uploader = UploaderQuark(cookies_raw=cookies_quark, browser_context=context)
+
+        elif args.target == '115':
+            cookies_115 = os.getenv("COOKIES_115")
+            if not cookies_115:
+                print("❌ 非演习模式下目标为 115 时必须配置 COOKIES_115 环境变量")
+                return
+            from uploaders.uploader_115 import Uploader115
+            uploader = Uploader115(cookies_raw=cookies_115)
 
     # 逐个系列处理
     total_success = 0

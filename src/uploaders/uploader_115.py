@@ -140,3 +140,42 @@ class Uploader115:
                 print(f"❌ 115 上传失败: Cookie 已过期！({e})")
             else:
                 print(f"❌ 115 上传出错: {e}")
+
+    # =========================================================
+    # 离线下载（磁力工作流专用，异步包装）
+    # =========================================================
+    async def add_offline_download(self, magnet_url: str) -> bool:
+        """
+        提交磁力链接到 115 离线下载
+        
+        Args:
+            magnet_url: 磁力链接
+            
+        Returns:
+            是否提交成功
+        """
+        if not magnet_url or not magnet_url.startswith("magnet:"):
+            print("  ❌ 115: 无效的磁力链接格式")
+            return False
+
+        if not self.client:
+            print("  ❌ 115 客户端未就绪")
+            return False
+
+        print(f"  🧲 [115] 正在提交离线下载任务: {magnet_url[:60]}...")
+        import asyncio
+        try:
+            # P115Client 是同步的，为了防止阻塞跑在线程池里
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(None, self.client.offline_add_url, magnet_url)
+            
+            if resp.get('state'):
+                print("  ✅ [115] 磁力离线下载任务已成功提交！")
+                return True
+            else:
+                print(f"  ❌ [115] 提交离线下载失败: {resp}")
+                return False
+        except Exception as e:
+            print(f"  ❌ [115] 提交离线下载异常: {e}")
+            return False
+
