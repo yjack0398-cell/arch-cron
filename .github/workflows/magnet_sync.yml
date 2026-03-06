@@ -1,0 +1,71 @@
+name: Magnet Sync to Quark
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # UTC 18:00 (北京时间凌晨 02:00)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "演习模式 (只搜索和更新番号但不真提交下载)"
+        type: boolean
+        required: false
+        default: false
+      series:
+        description: "指定处理某个系列 (可选，填写精确名称如 'FNS-139'，留空即全量)"
+        type: string
+        required: false
+        default: ""
+      check_count:
+        description: "每个系列向前探测的预期数"
+        type: number
+        required: true
+        default: 3
+
+permissions:
+  contents: write
+
+jobs:
+  run-magnet-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install playwright python-dotenv bs4 requests
+
+      - name: Install Playwright Browsers
+        run: |
+          playwright install chromium
+
+      - name: Execute Magnet Sync Task
+        env:
+          COOKIES_QUARK: ${{ secrets.COOKIES_QUARK }}
+        run: |
+          CMD="python src/tasks/task_magnet_sync.py --check_count ${{ github.event.inputs.check_count || 3 }}"
+
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            CMD="$CMD --dry_run"
+          fi
+
+          if [ -n "${{ github.event.inputs.series }}" ]; then
+            CMD="$CMD --series \"${{ github.event.inputs.series }}\""
+          fi
+
+          echo "Running command: $CMD"
+          eval $CMD
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add src/config/magnet_series.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(config): 🛡️ Auto-update magnet_series.json from Magnet Sync" && git pull --rebase origin main && git push)
