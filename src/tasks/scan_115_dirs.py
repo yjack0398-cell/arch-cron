@@ -154,6 +154,8 @@ def scan_115_recursive(client: P115Client, current_cid: int, current_path: str, 
     print(f"  {'  ' * current_depth}📂 正在扫描: {current_path or '/'} (CID: {current_cid})")
     
     try:
+        # 在每次扫描新目录前固定加入较大的随机延迟，以降低整体扫描频率，从本质上避免被 115 封锁
+        time.sleep(random.uniform(2.0, 5.0))
         # 获取当前目录下的所有项目（分页获取为了安全起见这里先拿前 500 个）
         # client.fs_files 默认 limit=32，我们需要多拿一点
         items = []
@@ -176,15 +178,16 @@ def scan_115_recursive(client: P115Client, current_cid: int, current_path: str, 
                     break
                 
                 # 针对 405 错误，通常意味着被 115 临时限制，需要大幅度休眠
-                wait_time = 10 * retry_count + random.randint(5, 15)
+                # 递增的非常长的等待期，1分钟起步，防被持续封
+                wait_time = 60 * retry_count + random.randint(10, 30)
                 print(f"  {'  ' * current_depth}⏳ 请求受限(405)或异常，强制休眠 {wait_time} 秒后重试... ({retry_count}/3)")
                 time.sleep(wait_time)
                 continue
             
             # 正常请求后清零重试计数
             retry_count = 0
-            # 使用随机延迟 (0.8s - 2.5s) 模拟人类行为，防范 115 的频率检测
-            time.sleep(random.uniform(0.8, 2.5))
+            # 使用随机延迟 (1.2s - 3.5s) 模拟人类翻页行为，防范 115 的频率检测
+            time.sleep(random.uniform(1.2, 3.5))
             
             if not batch:
                 break
