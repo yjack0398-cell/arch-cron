@@ -57,7 +57,7 @@
   },
   "AUKS-046": {
     "prefix": "AUKS-",
-    "last_number": 46,
+    "last_number": 48,
     "enabled": true
   },
   "Videos": {
@@ -67,7 +67,7 @@
   },
   "YMDD-284": {
     "prefix": "YMDD-",
-    "last_number": 284,
+    "last_number": 285,
     "enabled": true
   },
   "DRPT-022": {
